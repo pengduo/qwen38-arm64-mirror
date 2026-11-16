@@ -1,0 +1,41 @@
+name: Mirror vLLM arm64 image to GHCR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo apt-get clean
+          df -h
+
+      - name: Pull official arm64 image
+        run: |
+          IMG='vllm/vllm-openai@sha256:e3481489818d3e563cae517b84ab959cc8b69f85a9fbb771c189140131ffc65c'
+          docker pull --platform linux/arm64 "$IMG"
+          docker image inspect "$IMG" --format 'arch={{.Architecture}} size={{.Size}}'
+          df -h
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Tag and push
+        run: |
+          SRC='vllm/vllm-openai@sha256:e3481489818d3e563cae517b84ab959cc8b69f85a9fbb771c189140131ffc65c'
+          ID=$(docker image inspect "$SRC" --format '{{.Id}}')
+          DST="ghcr.io/${{ github.repository_owner }}/qwen38-vllm-openai:v0.33.0-arm64"
+          docker tag "$ID" "$DST"
+          docker push "$DST"
+
+      - name: Show disk
+        if: always()
+        run: df -h
